@@ -5,93 +5,23 @@ from fprime_gds.executables.cli import ParserBase, StandardPipelineParser
 import json
 import fprime_openmct
 
-class EnumIngester:
-    """
-    The Enum Ingester class intends to take the F-Prime Topology App Dictionary XML and generate Enum Definitions in the OpenMCT Format
-    It includes the following data members:
-
-    1. root -> Contains root(top level) of Topology App XML Tree
-    2. types -> One level lower from the root. Contains type information stored in the Topology App XML
-    3. enums -> Defines enumeration types from the Topology App XML
-    """
-    def __init__(self, root):
-        self.__int_type_list = ['U64', 'U32', 'U16', 'U8', 'I64', 'I32', 'I16', 'I8']
-        self.__float_type_list = ['F64', 'F32']
-        self._serializables_type_list = ['']
-        self._root = root
-        self._types = self.traverseLevel(self._root)
-        self._enums = self.formulateEnum(self.traverseLevel(self._types[0]))
-        self._init_serializables = {}
-        self._serializables = self.formulateSerializable(self.traverseLevel(self._types[1]))
-
-
-
-    def traverseLevel(self, level):
-        sub_list = []
-        for sublevel in level:
-            sub_list.append(sublevel)
-        return sub_list
-    
-    # Formulates the Enum dictionary based on the format specified by OpenMCT
-    def formulateEnum(self, enums):
-        enum_list = []
-        for enum in enums:
-            enum_entry = {}
-            enum_entry['type'] = enum.attrib['type']
-            #print((enum.tag, enum.attrib))
-            enum_subentry_list = []
-            for enu in enum:
-                enum_subentry = {}
-                enum_subentry['string'] = enu.attrib['name']
-                enum_subentry['value'] = int(enu.attrib['value'])
-                #print((enu.tag, enu.attrib))
-                enum_subentry_list.append(enum_subentry)
-            enum_entry['val'] = enum_subentry_list
-            enum_list.append(enum_entry)
-        return enum_list
-    
-    def formulateSerializable(self, serializables):
-        serializable_entries = []
-        for serializable in serializables:
-            self._serializables_type_list.append(serializable.attrib['type'])
-            for members in serializable:
-                for member in members:
-                    serializable_entry = {}
-                    #print((member.tag, member.attrib))
-                    serializable_entry['name'] = serializable.attrib['type'] #serializable.attrib['type'][serializable.attrib['type'].find('::'):].replace('::', '') + '.' + member.attrib['name']
-                    serializable_entry['key'] = member.attrib['name']
-                    serializable_entry['values'] = [{}, {}]
-                    serializable_entry['values'][0]['key'] = "value" #channel_obj.id
-                    serializable_entry['values'][0]['name'] = "Value" #channel_obj.name
-                    if(member.attrib['type'] in self.__float_type_list):
-                        serializable_entry['values'][0]['format'] = 'float'
-                        self._init_serializables[serializable_entry['name']] = 0.0
-                    elif(member.attrib['type'] in self.__int_type_list):
-                        serializable_entry['values'][0]['format'] = 'integer'
-                        self._init_serializables[serializable_entry['name']] = 0
-                    else:
-                        serializable_entry['values'][0]['format'] = 'enum'
-
-                    if(serializable_entry['values'][0]['format'] == 'enum'):
-                        for enum_vals in self._enums:
-                            if(enum_vals['type'] == member.attrib['type']):
-                                serializable_entry['values'][0]['enumerations'] = enum_vals['val']
-                                self._init_serializables[serializable_entry['name']] = enum_vals['val'][0]['string']
-
-                    serializable_entry['values'][0]['hints'] = {}
-                    serializable_entry['values'][0]['hints']['range'] = 1
-
-                    serializable_entry['values'][1]['key'] = 'utc'
-                    serializable_entry['values'][1]['source'] = 'timestamp'
-                    serializable_entry['values'][1]['name'] = 'Timestamp'
-                    serializable_entry['values'][1]['format'] = 'utc'
-                    serializable_entry['values'][1]['hints'] = {}
-                    serializable_entry['values'][1]['hints']['domain'] = 1
-
-                    serializable_entries.append(serializable_entry)
-
-
-        return serializable_entries
+from fprime.common.models.serialize.array_type import ArrayType
+from fprime.common.models.serialize.bool_type import BoolType
+from fprime.common.models.serialize.enum_type import EnumType
+from fprime.common.models.serialize.numerical_types import (
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
+    F32Type,
+    F64Type,
+)
+from fprime.common.models.serialize.serializable_type import SerializableType
+from fprime.common.models.serialize.string_type import StringType
 
 class TopologyAppDictionaryJSONifier():
     """
@@ -109,23 +39,22 @@ class TopologyAppDictionaryJSONifier():
 
     """
     def __init__(self, xml_path='MPPTDeploymentTopologyAppDictionary.xml'):
-        self.__int_type_list = ['U64Type', 'U32Type', 'U16Type', 'U8Type', 'I64Type', 'I32Type', 'I16Type', 'I8Type']
-        self.__float_type_list = ['F64Type', 'F32Type']
-        self.__framework_list = ['::FRAMEWORK_VERSIONString']
+        project_dictionary = Dictionaries()
+        project_dictionary.load_dictionaries(xml_path, packet_spec=None)
+        
+        self.dictionary_of_channel = {}
+
+        for key, value in project_dictionary.channel_id.items():
+            channel_name = value.get_full_name().replace(".", "_")
+
+            keys_to_access_values_and_type = []
+            self.create_access_list(
+                value.get_type_obj(), keys_to_access_values_and_type
+            )
+            self.dictionary_of_channel[channel_name] = keys_to_access_values_and_type
+
         self.__measurement_list = []
-
         self.__init_states = {}
-
-        #Formulate dict from XML Tree to get enum decomposition
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-        self.__dict_xml = EnumIngester(root)
-
-        self.__serializable_list = self.__dict_xml._serializables_type_list
-
-        self.__dict_test = Dictionaries()
-        self.__dict_test.load_dictionaries(xml_path, packet_spec=None)
-        self.__channel_list  = self.__dict_test.channel_id
 
         #Populate the measurement list  
         self.loadEntries()
@@ -138,59 +67,42 @@ class TopologyAppDictionaryJSONifier():
     # Load Telemetry Channel List and format it to be in the OpenMCT Dictionary Format
     def loadEntries(self):
 
-        for channel_num, channel_obj in self.__channel_list.items():
-            measurement_entry = {}
-            measurement_entry['values'] = [{}, {}]
-
-            measurement_entry['name'] = channel_obj.name
-            measurement_entry['key'] = channel_obj.comp_name + '.' + channel_obj.name 
-            measurement_entry['values'][0]['key'] = "value" #channel_obj.id
-            measurement_entry['values'][0]['name'] = "Value" #channel_obj.name
-            measurement_entry['values'][0]['hints'] = {}
-            measurement_entry['values'][0]['hints']['range'] = 1
-
-            measurement_entry['values'][1]['key'] = 'utc'
-            measurement_entry['values'][1]['source'] = 'timestamp'
-            measurement_entry['values'][1]['name'] = 'Timestamp'
-            measurement_entry['values'][1]['format'] = 'utc'
-            measurement_entry['values'][1]['hints'] = {}
-            measurement_entry['values'][1]['hints']['domain'] = 1
-
-            if(channel_obj.ch_type_obj.__name__ in self.__float_type_list):
-                measurement_entry['values'][0]['format'] = 'float'
-                self.__init_states[measurement_entry['key']] = 0.0
-            elif(channel_obj.ch_type_obj.__name__ in self.__int_type_list):
-                measurement_entry['values'][0]['format'] = 'integer'
-                self.__init_states[measurement_entry['key']] = 0
-            elif (channel_obj.ch_type_obj.__name__ in self.__framework_list):
-                continue
-            elif (channel_obj.ch_type_obj.__name__ in self.__serializable_list):
-                for struct_entry in self.__dict_xml._serializables:
-                    if struct_entry['name'] == channel_obj.ch_type_obj.__name__:
-                        new_entry = {}
-                        new_entry['name'] = measurement_entry['key'] + '.' + struct_entry['name'][struct_entry['name'].find('::'):].replace('::', '') + '.' + struct_entry['key']
-                        new_entry['key'] = new_entry['name']
-                        new_entry['values'] = measurement_entry['values']
-                        self.__init_states[new_entry['name']] = 0
-                        self.__measurement_list.append(new_entry) 
-      
-                continue
-            else:
-                measurement_entry['values'][0]['format'] = 'enum'
-
+        for chanel_name, keys_to_access_values_and_type in self.dictionary_of_channel.items():
             
-            if(measurement_entry['values'][0]['format'] == 'enum'):
-                for enum_vals in self.__dict_xml._enums:
-                    if(enum_vals['type'] == channel_obj.ch_type_obj.__name__):
-                        measurement_entry['values'][0]['enumerations'] = enum_vals['val']
-                        self.__init_states[measurement_entry['key']] = enum_vals['val'][0]['string']
+            for channel_member in self.dictionary_of_channel[chanel_name]:
+                measurement_entry = {}
+                measurement_entry['values'] = [{}, {}]
+                keys = channel_member.get("keys", [])
+                measurement_entry['name'] = chanel_name+(('_'+'_'.join(map(str, keys))) if len(keys)>0 else "")
+                measurement_entry['key'] = chanel_name+(('_'+'_'.join(map(str, keys))) if len(keys)>0 else "")
 
+                measurement_entry['values'][0]['key'] = "value" #channel_obj.id
+                measurement_entry['values'][0]['name'] = "Value" #channel_obj.name
+                measurement_entry['values'][0]['hints'] = {}
+                measurement_entry['values'][0]['hints']['range'] = 1
 
+                measurement_entry['values'][1]['key'] = 'utc'
+                measurement_entry['values'][1]['source'] = 'timestamp'
+                measurement_entry['values'][1]['name'] = 'Timestamp'
+                measurement_entry['values'][1]['format'] = 'utc'
+                measurement_entry['values'][1]['hints'] = {}
+                measurement_entry['values'][1]['hints']['domain'] = 1
 
+                type_i = channel_member.get("type", [])
+                measurement_entry['values'][0]['format'] = type_i
 
-            self.__measurement_list.append(measurement_entry)   
+                if(type_i == "float"):
+                    self.__init_states[measurement_entry['key']] = 0.0
+                elif(type_i == "integer"):
+                    measurement_entry['values'][0]['format'] = 'integer'
+                    self.__init_states[measurement_entry['key']] = 0 
+                elif(type_i == 'enum'):
+                    measurement_entry['values'][0]['enumerations'] = [{'string': key, 'value': value} for key, value in channel_member.get("enum", {}).items()]
+                    self.__init_states[measurement_entry['key']] = list(channel_member.get("enum", {}).keys())[0]
 
-        self.__init_states = {**self.__init_states, **self.__dict_xml._init_serializables}
+                self.__measurement_list.append(measurement_entry)   
+
+        self.__init_states = {**self.__init_states}#, **self.__dict_xml._init_serializables}
 
     #Write OpenMCT dictionary to a JSON file
     def writeOpenMCTJSON(self, fname, fpath=fprime_openmct.__file__.replace('__init__.py', 'javascript')):
@@ -201,7 +113,51 @@ class TopologyAppDictionaryJSONifier():
     def writeInitialStatesJSON(self, fname, fpath=fprime_openmct.__file__.replace('__init__.py', 'javascript')):
         initialstates_json = json.dumps(self.__init_states, indent=4)
         with open(fpath + '/' + fname + ".json", "w") as outfile:
-            outfile.write(initialstates_json)     
+            outfile.write(initialstates_json)    
+
+    def create_access_list(self, ch_type, keysArr_types=[], keys_until_now=[]):
+        """
+        It recursively create a list of dictionaries where each dictionary contains for each primary type of a channel:
+        * a list of keys to access a primary type
+        ****
+        """
+        channel_types = {
+            F32Type: 'float',
+            F64Type: 'float',
+            I8Type: 'integer',
+            I16Type: 'integer',
+            I32Type: 'integer',
+            I64Type: 'integer',
+            U8Type: 'integer',
+            U16Type: 'integer',
+            U32Type: 'integer',
+            U64Type: 'integer',
+            BoolType: 'integer'
+        }
+
+        if ch_type in channel_types:
+            channel_type = channel_types[ch_type]
+            keysArr_types.append({"keys":keys_until_now, "type": channel_type})
+            return
+        elif(issubclass(ch_type, ArrayType)):
+            for index in  range(0, ch_type.LENGTH):
+                # Call recursively to deserialize the channel element
+                upgrade_key_list= (keys_until_now+[index]).copy()
+                self.create_access_list(ch_type.MEMBER_TYPE, keysArr_types, upgrade_key_list)
+        elif(issubclass(ch_type, EnumType)):
+            keysArr_types.append({"keys":keys_until_now, "type": "enum", "enum":ch_type.ENUM_DICT})
+            return
+        elif(issubclass(ch_type, StringType)):
+            keysArr_types.append({"keys":keys_until_now, "type": "text"})
+            return
+        elif(issubclass(ch_type, SerializableType)):
+            for member_name, member_value, member_format, member_desc in ch_type.MEMBER_LIST:
+                # Call recursively to deserialize the channel element
+                upgrade_key_list= (keys_until_now+[member_name]).copy()
+                self.create_access_list(member_value, keysArr_types, upgrade_key_list)
+                
+        else:
+            raise Exception("Not supported type") 
 
 if __name__ == '__main__':
     #Set up and Process Command Line Arguments
