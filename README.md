@@ -21,6 +21,8 @@ pip install . # from the root of the repository
 
 
 ### Install F-Prime OpenMCT Dependencies and OpenMCT from Source
+Not required if pip install is done.
+
 ```
 fprime-openmct-setup # from the root of the repository
 ```
