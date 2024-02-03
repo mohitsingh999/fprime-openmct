@@ -16,6 +16,10 @@ import time
 import json
 
 
+import signal
+import threading
+
+shutdown_event = threading.Event()
 
 class TelemPipeline(StandardPipeline):
     """
@@ -95,7 +99,13 @@ class TelemPipeline(StandardPipeline):
     def post_telem(self, uri="http://127.0.0.1:4052/fprime_telem"):
         requests.post(uri, json={'name': 'heli', 'telem': self.telem_data}) 
 
+def signal_handler(*_):
+    print("Ctrl-C received, server shutting down.")
+    shutdown_event.set()
+
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
+    
     #Set up and Process Command Line Arguments
     arguments, _ = ParserBase.parse_args([StandardPipelineParser, OpenMCTTelemetryPollerParser],
                                                 description="OpenMCT Telemetry Polling Parser",
@@ -108,8 +118,9 @@ def main():
                                 dict_path=arguments.dictionary,
                                 log_path=arguments.logs)
     
+
     # Continuously poll for telemetry from the F-Prime GDS Pipeline
-    while True:
+    while not shutdown_event.is_set():
         #Poll the F-Prime GDS Pipeline for telemetry, and update the latest telemetry JSON
         telem_pipeline.update_telem_hist() 
         telem_pipeline.set_telem_json()
