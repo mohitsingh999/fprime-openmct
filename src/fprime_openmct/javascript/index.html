@@ -29,25 +29,25 @@
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title></title>
-    <script src="dist/openmct.js"></script>
+    <script src="node_modules/openmct/dist/openmct.js"></script>
     <link
       rel="icon"
       type="image/png"
-      href="dist/favicons/favicon-96x96.png"
+      href="node_modules/openmct/dist/favicons/favicon-96x96.png"
       sizes="96x96"
       type="image/x-icon"
     />
     <link
       rel="icon"
       type="image/png"
-      href="dist/favicons/favicon-32x32.png"
+      href="node_modules/openmct/dist/favicons/favicon-32x32.png"
       sizes="32x32"
       type="image/x-icon"
     />
     <link
       rel="icon"
       type="image/png"
-      href="dist/favicons/favicon-16x16.png"
+      href="node_modules/openmct/dist/favicons/favicon-16x16.png"
       sizes="16x16"
       type="image/x-icon"
     />
@@ -97,7 +97,6 @@
 
 
   </head>
-  <body></body>
   <script>
     const THIRTY_SECONDS = 30 * 1000;
     const ONE_MINUTE = THIRTY_SECONDS * 2;
@@ -108,6 +107,8 @@
     const TWO_HOURS = ONE_HOUR * 2;
     const ONE_DAY = ONE_HOUR * 24;
 
+    openmct.setAssetPath('node_modules/openmct/dist');
+    
     openmct.install(openmct.plugins.LocalStorage());
 
     openmct.install(openmct.plugins.example.Generator());
@@ -244,7 +245,7 @@
     openmct.install(openmct.plugins.BarChart());
     openmct.install(openmct.plugins.ScatterPlot());
 
-    
+
     openmct.install(DictionaryPlugin());
     openmct.install(RealtimeTelemetryPlugin());
 
@@ -252,4 +253,5 @@
       openmct.start();
     });
   </script>
+  <body></body>
 </html>

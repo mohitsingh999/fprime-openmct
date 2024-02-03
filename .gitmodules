@@ -1,4 +1,1 @@
 
-[submodule "src/fprime_openmct/javascript/openmct"]
-	path = src/fprime_openmct/javascript/openmct
-	url = https://github.com/nasa/openmct.git
