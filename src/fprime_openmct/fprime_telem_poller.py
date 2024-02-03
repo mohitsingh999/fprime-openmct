@@ -1,9 +1,14 @@
+from ast import List
 from fprime_gds.common.pipeline.standard import StandardPipeline
 from fprime_gds.common.utils.config_manager import ConfigManager
 from fprime_gds.common.history.chrono import ChronologicalHistory
 
+from fprime_gds.common.templates.ch_template import ChTemplate
+
 from fprime_gds.executables.cli import ParserBase, StandardPipelineParser, OpenMCTTelemetryPollerParser
 from typing import Any, Dict, Tuple
+
+from fprime_openmct.fprime_to_openmct import TopologyAppDictionaryJSONifier 
 
 import requests 
 import time 
@@ -11,6 +16,10 @@ import time
 import json
 
 
+import signal
+import threading
+
+shutdown_event = threading.Event()
 
 class TelemPipeline(StandardPipeline):
     """
@@ -32,12 +41,13 @@ class TelemPipeline(StandardPipeline):
         self.connect(connection_ip, connection_port)
         self.telem_chron_hist = ChronologicalHistory()
         self.coders.register_channel_consumer(self.telem_chron_hist)
-        self.telem_hist = []
+        self.telem_hist:List[ChTemplate] = []
         self.telem_data = []
         self.telem_init_states = {}
         self.telem_init_json = {}
         self.max_state_count = 0
         self.json_writeable = False
+        self.topologyToJson: TopologyAppDictionaryJSONifier = TopologyAppDictionaryJSONifier(dict_path)
 
     def get_telem_hist(self):
         return self.telem_hist
@@ -50,50 +60,32 @@ class TelemPipeline(StandardPipeline):
 
     def set_telem_json(self):
         self.telem_data = []
-        for hist in self.telem_hist:
-            #print(hist)
-            self.json_writeable = True
+        for channel in self.telem_hist:
 
-            #check for structs
-            if isinstance(hist.get_val(), dict):
-                #print(hist.get_val().items())
-                i = 0
-                for key, val in hist.get_val().items():
-                    hist_name = str(hist.template.comp_name) + '.' + str(hist.template.name) + '.' + hist.template.ch_type_obj.__name__[hist.template.ch_type_obj.__name__.find('::'):].replace('::', '') + '.' + key
-                    #print(hist_name)
+            full_channel_name = channel.template.get_full_name().replace(".", "_")
+            channel_structure = self.topologyToJson.dictionary_of_channel[full_channel_name]
+            data = channel.get_val()
+            for single_telemetry in channel_structure:
+                keys = single_telemetry.get("keys", [])
+                value = data
+                for key in keys:
+                    value = value[key]
+                self.json_writeable = True
 
-                    hist_data = {
-                                'name': hist_name, 
-                                'data': {
-                                        'id':hist.id+i,
-                                        'val': val,
-                                        'time':hist.time.to_readable()
-                                        }
-                                }
-                    
-                    self.telem_data.append(hist_data)
-
-                    if self.json_writeable:
-                        self.telem_init_states[hist_name] = val
-
-                    i = i + 1
-
-            else: 
-                hist_name = str(hist.template.comp_name) + '.' + str(hist.template.name)
-
+                hist_name = full_channel_name+(('_'+'_'.join(map(str, keys))) if len(keys)>0 else "")
                 hist_data = {
                             'name': hist_name, 
                             'data': {
-                                    'id':hist.id,
-                                    'val':hist.get_val(),
-                                    'time':hist.time.to_readable()
+                                    'id':hist_name,
+                                    'val':value,
+                                    'time':channel.time.to_readable()
                                     }
                             }
                 
                 self.telem_data.append(hist_data)
 
                 if self.json_writeable:
-                    self.telem_init_states[hist_name] = hist.get_val()
+                    self.telem_init_states[hist_name] = value
 
 
 
@@ -107,7 +99,13 @@ class TelemPipeline(StandardPipeline):
     def post_telem(self, uri="http://127.0.0.1:4052/fprime_telem"):
         requests.post(uri, json={'name': 'heli', 'telem': self.telem_data}) 
 
+def signal_handler(*_):
+    print("Ctrl-C received, server shutting down.")
+    shutdown_event.set()
+
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
+    
     #Set up and Process Command Line Arguments
     arguments, _ = ParserBase.parse_args([StandardPipelineParser, OpenMCTTelemetryPollerParser],
                                                 description="OpenMCT Telemetry Polling Parser",
@@ -120,8 +118,9 @@ def main():
                                 dict_path=arguments.dictionary,
                                 log_path=arguments.logs)
     
+
     # Continuously poll for telemetry from the F-Prime GDS Pipeline
-    while True:
+    while not shutdown_event.is_set():
         #Poll the F-Prime GDS Pipeline for telemetry, and update the latest telemetry JSON
         telem_pipeline.update_telem_hist() 
         telem_pipeline.set_telem_json()

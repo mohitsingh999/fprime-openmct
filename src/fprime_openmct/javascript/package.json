@@ -1,15 +1,16 @@
 {
-    "name": "fprime-openmct-server",
-    "version": "0.0.1",
-    "description": "Server for Connecting F-Prime Telemetry to OpenMCT Server",
-    "main": "fprime-openmct-server/server.js",
-    "scripts": {
-      "start": "node fprime-openmct-server/server.js",
-      "postinstall": "cd openmct && npm install"
-    },
-    "dependencies": {
-      "express": "^4.14.1",
-      "express-ws": "^3.0.0",
-      "ws": "^2.0.3"
-    }
+  "name": "fprime-openmct-server",
+  "version": "0.0.1",
+  "description": "Server for Connecting F-Prime Telemetry to OpenMCT Server",
+  "main": "fprime-openmct-server/server.js",
+  "scripts": {
+    "start": "node fprime-openmct-server/server.js",
+    "clean": "rm -rf node_modules package-lock.json"
+  },
+  "dependencies": {
+    "express": "^4.16.4",
+    "express-ws": "^4.0.0",
+    "openmct": "^3.2.0",
+    "ws": "^6.1.2"
   }
+}

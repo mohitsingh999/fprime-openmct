@@ -20,13 +20,6 @@ pip install . # from the root of the repository
 ```
 
 
-### Install F-Prime OpenMCT Dependencies and OpenMCT from Source
-```
-fprime-openmct-setup # from the root of the repository
-```
-This command should install the OpenMCT Server and the F-Prime to OpenMCT pipeline in Node JS. 
-
-
 The scripts generating the OpenMCT JSON Definitions and polling for real time telemetry use the latest F-Prime GDS API, so it is key to install the latest versions of `fprime_gds` and `fprime_tools`. 
 ### Install F-Prime GDS(>3.2.0) and F-Prime Tools(>3.2.0)
 ```
@@ -41,7 +34,7 @@ pip install fprime_gds==3.2.0 fprime_tools==3.2.0
 
 #### Generating the OpenMCT JSON and Initial States
 ```
-cd telem_definition_generator
+cd src/fprime_openmct
 python fprime_to_openmct.py --dictionary {path to F-Prime Topology App Dictionary XML}
 ```
 
@@ -50,6 +43,7 @@ There should now be files called `initial_states.json` and `FPrimeDeploymentTopo
 #### Starting the OpenMCT Server
 ```
 cd src/fprime_openmct/javascript
+npm install
 npm start
 ```
 This command starts up the OpenMCT server with the Telemetry Definitions generated in `FPrimeDeploymentTopologyAppDictionary.json`. Using `initial_states.json`, the server gets initial values for each of the telemetry channels. For real-time telemetry, we must run another script that polls the F-Prime GDS API for telemetry from an F-Prime deployment. 
@@ -66,6 +60,16 @@ For additional details on running the tool with the standard `Ref` deployment, s
 
 ### Method 2: Running with updated F-Prime GDS
 An updated fork of F-Prime GDS allows users to merely run one command to generate the OpenMCT JSON and Initial States, Start the OpenMCT Server, and Subscribe and Publish FPrime Telemetry.
+
+Install npm dependencies by:
+
+```
+fprime-openmct-setup # from the root of the repository(it executes npm install)
+```
+This command should install the OpenMCT Server and the F-Prime to OpenMCT pipeline in Node JS. 
+
+Then start fprime-gds and openmct:
+
 ```
 fprime-gds --openmct
 ```
